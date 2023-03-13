@@ -167,12 +167,52 @@ exitError (Error msg) = return (VErr msg)
 --------------------------------------------------------------------------------
 eval :: Env -> Expr -> Value
 --------------------------------------------------------------------------------
-eval = error "TBD:eval"
+eval env (EInt x)         = VInt x
+eval env (EBool b)        = VBool b
+eval env (ENil)           = VNil
+eval env (EVar id)        = lookupId id env
+eval env (EBin op e1 e2)  = evalOp op (eval env e1) (eval env e2)
+eval env (EIf p t f)      = case eval env p of
+  VBool b -> if b then eval env t else eval env f
+  _ -> throw (Error "type error")
+eval env (ELet id e1 e2)  = eval env2 e2
+  where
+    value = eval env2 e1
+    env2  = (id, value) : env
+eval env (ELam id expr)     = VClos env id expr
+eval env (EApp fnExpr argExpr)  = case (eval env fnExpr) of
+  (VPrim f) -> f (eval env argExpr)
+  (VClos a b c) -> eval env2 body
+  _ -> throw (Error "type error EApp")
+  where
+    (VClos oldEnv id body)  = eval env fnExpr
+    argVal                  = eval env argExpr
+    env2                    = (id, argVal) : oldEnv
+eval e1 e2  = throw (Error ("type error eval: " ++ {-envString e1 ++-} exprString e2))
+
 
 --------------------------------------------------------------------------------
 evalOp :: Binop -> Value -> Value -> Value
 --------------------------------------------------------------------------------
-evalOp = error "TBD:evalOp"
+evalOp op (VInt n1) (VInt n2) = case op of
+  Plus -> VInt (n1 + n2)
+  Minus -> VInt (n1 - n2)
+  Mul -> VInt (n1 * n2)
+  Eq -> VBool (n1 == n2)
+  Ne -> VBool (n1 /= n2)
+  Lt -> VBool (n1 < n2)
+  Le -> VBool (n1 <= n2)
+evalOp op (VBool n1) (VBool n2) = case op of
+  Eq -> VBool (n1 == n2)
+  Ne -> VBool (n1 /= n2)
+  And -> VBool (n1 && n2)
+  Or -> VBool (n1 || n2)
+evalOp Eq VNil VNil             = VBool (True)
+evalOp Eq (VPair a1 b1) (VPair a2 b2) = VBool ((a1 == a2) && (b1 == b2))
+evalOp Eq (VPair a1 b1) (VNil)  = VBool (a1 == VNil)
+evalOp Eq (VNil) (VPair a1 b1)  = VBool (a1 == VNil)
+evalOp Cons a b                 = VPair a b
+evalOp op _ _ = throw (Error ("type error: binop"))
 
 --------------------------------------------------------------------------------
 -- | `lookupId x env` returns the most recent
@@ -191,7 +231,10 @@ evalOp = error "TBD:evalOp"
 --------------------------------------------------------------------------------
 lookupId :: Id -> Env -> Value
 --------------------------------------------------------------------------------
-lookupId = error "TBD:lookupId"
+lookupId id env
+  | null env      = throw (Error ("unbound variable: " ++ id))
+  | id == fst (head env) = snd (head env)
+  | otherwise     = lookupId id (tail env)
 
 prelude :: Env
 prelude =
